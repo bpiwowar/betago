@@ -6,7 +6,6 @@ import signal
 import sys
 import time
 
-import keras.backend
 import numpy as np
 import six.moves.queue as queue
 

@@ -5,8 +5,16 @@ import random
 from itertools import chain, product
 from multiprocessing import Process
 
-from flask import Flask, request, jsonify
-from flask.ext.cors import CORS
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+import os.path as op
+import logging
+import re
+import cgi
+import json
+import inspect
+
 import numpy as np
 from . import scoring
 from .dataloader.goboard import GoBoard
@@ -14,9 +22,70 @@ from .processor import ThreePlaneProcessor
 from six.moves import range
 
 
-class HTTPFrontend(object):
+def routes(clazz):
+    clazz.__routes__ = {}
+    for m in dir(clazz):
+        m = getattr(clazz, m)
+        route = getattr(m, "__route__", None)
+        if route:
+            clazz.__routes__[route] = m
+    logging.info("Detected routes: %s", clazz.__routes__.keys())
+    return clazz
+
+class route:
+    def __init__(self, path, methods=None):
+        self.pathre = re.compile("^%s$" % path)
+        self.methods = methods
+    def __call__(self, method):
+        method.__route__ = self
+        self.method = method
+        self.parameters = inspect.signature(self.method).parameters
+        return method
+
+    def __repr__(self):
+        return "route(%s)" % self.pathre
+
+    def send_headers(self, http, size=None):
+        ctype = "text/html"
+        http.send_response(HTTPStatus.OK)
+        http.send_header("Content-type", ctype)
+        if size:
+            http.send_header("Content-Length",size)
+        # self.send_header("Last-Modified", self.date_time_string(fs.st_mtime))
+        http.end_headers()
+
+    def process(self, http):
+        m = self.pathre.match(http.path)
+        logging.info("=== Matching %s with %s [%s]...", http.path, self.pathre, not(m is None))
+        if not m: 
+            return False
+
+        logging.info("Processing with %s [%s]...", self.method, m.groupdict())
+
+        values = m.groupdict()
+        args = []
+        kwargs = {}
+        first = True
+        for k, v in self.parameters.items():
+            if first:
+                first = False
+                args.append(http)
+            elif v.kind == inspect.Parameter.POSITIONAL_ONLY or v.default == inspect.Signature.empty:
+                    args.append(values[k])
+            else:
+                kwargs[k] = values.get(k, v.default)
+
+        logging.info("Calling %s with %s and %s", self.method, args, kwargs)
+        output = self.method(*args, **kwargs)
+        self.send_headers(http, size=len(output))
+        http.wfile.write(output)
+        return True
+
+
+
+class HTTPFrontend():
     '''
-    HTTPFrontend is a simple Flask app served on localhost:8080, exposing a REST API to predict
+    HTTPFrontend is a simple http server localhost:8080, exposing a REST API to predict
     go moves.
     '''
 
@@ -35,69 +104,95 @@ class HTTPFrontend(object):
         self.server.join()
 
     def run(self):
-        ''' Run flask app'''
-        app = Flask(__name__)
-        CORS(app, resources={r"/prediction/*": {"origins": "*"}})
-        self.app = app
+        ''' Run app'''    
+        @routes
+        class HTTPRequestHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                for route, method in HTTPRequestHandler.__routes__.items():
+                    if route.process(self):
+                        return
+                logging.error("Could not process %s", self.path)
 
-        @app.route('/dist/<path:path>')
-        def static_file_dist(path):
-            return open("ui/dist/" + path).read()
+                self.send_response(HTTPStatus.NOT_FOUND)
+                self.end_headers()
 
-        @app.route('/large/<path:path>')
-        def static_file_large(path):
-            return open("ui/large/" + path).read()
+            def do_POST(self):
+                ctype, pdict = cgi.parse_header(self.headers['content-type'])
+                logging.info("Handling post of content-type: %s", ctype)
+                if ctype == 'application/json':
+                    logging.info("File is %s / %s", self.rfile, self.headers["content-length"])
+                    s = self.rfile.read(int(self.headers["content-length"]))
+                    self.json = json.loads(s)
+                    logging.info("JSON payload: %s", self.json)
+                else:
+                    raise Exception("Cannot handle content-type %s", ctype)
 
-        @app.route('/')
-        def home():
-            # Inject game data into HTML
-            board_init = 'initialBoard = ""' # backup variable
-            board = {}
-            for row in range(19):
-                board_row = {}
-                for col in range(19):
-                    # Get the cell value
-                    cell = str(self.bot.go_board.board.get((col, row)))
-                    # Replace values with numbers
-                    # Value will be be 'w' 'b' or None
-                    cell = cell.replace("None", "0")
-                    cell = cell.replace("b", "1")
-                    cell = cell.replace("w", "2")
-                    # Add cell to row
-                    board_row[col] = int(cell) # must be an int
-                # Add row to board
-                board[row] = board_row
-            board_init = str(board) # lazy convert list to JSON
-            
-            return open("ui/demoBot.html").read().replace('"__i__"', 'var boardInit = ' + board_init) # output the modified HTML file
+                return self.do_GET()
 
-        @app.route('/sync', methods=['GET', 'POST'])
-        def exportJSON():
-            export = {}
-            export["hello"] = "yes?"
-            return jsonify(**export)
+            @route(r'/dist/(?P<path>.*)')
+            def static_file_dist(request, path):
+                return open("ui/dist/" + path, "rb").read()
 
-        @app.route('/prediction', methods=['GET', 'POST'])
-        def next_move():
-            '''Predict next move and send to client.
+            @route('/large/(?P<path>.*)')
+            def static_file_large(request, path):
+                return open("ui/large/" + path, "rb").read()
 
-            Parses the move and hands the work off to the bot.
-            '''
-            content = request.json
-            col = content['i']
-            row = content['j']
-            print('Received move:')
-            print((col, row))
-            self.bot.apply_move('b', (row, col))
+            @route('/')
+            def home(request):
+                # Inject game data into HTML
+                board_init = 'initialBoard = ""' # backup variable
+                board = {}
+                for row in range(19):
+                    board_row = {}
+                    for col in range(19):
+                        # Get the cell value
+                        cell = str(self.bot.go_board.board.get((col, row)))
+                        # Replace values with numbers
+                        # Value will be be 'w' 'b' or None
+                        cell = cell.replace("None", "0")
+                        cell = cell.replace("b", "1")
+                        cell = cell.replace("w", "2")
+                        # Add cell to row
+                        board_row[col] = int(cell) # must be an int
+                    # Add row to board
+                    board[row] = board_row
+                board_init = str(board).encode("utf-8") # lazy convert list to JSON
+                
+                # output the modified HTML file
+                return open("ui/demoBot.html", "rb").read().replace(b'"__i__"', b'var boardInit = ' + board_init) 
 
-            bot_row, bot_col = self.bot.select_move('w')
-            print('Prediction:')
-            print((bot_col, bot_row))
-            result = {'i': bot_col, 'j': bot_row}
-            json_result = jsonify(**result)
-            return json_result
+            @route('/sync', methods=['GET', 'POST'])
+            def exportJSON(request):
+                export = {}
+                export["hello"] = "yes?"
+                return json.dumps(export).encode("utf-8")
 
-        self.app.run(host='0.0.0.0', port=self.port, debug=True, use_reloader=False)
+            @route('/prediction', methods=['GET', 'POST'])
+            def next_move(request):
+                '''Predict next move and send to client.
+
+                Parses the move and hands the work off to the bot.
+                '''
+                content = request.json
+                col = content['i']
+                row = content['j']
+                print('Received move:')
+                print((col, row))
+                self.bot.apply_move('b', (row, col))
+
+                bot_row, bot_col = self.bot.select_move('w')
+                print('Prediction:')
+                print((bot_col, bot_row))
+                result = {'i': bot_col, 'j': bot_row}
+                json_result = json.dumps(result)
+                return json_result.encode("utf-8")
+        
+        
+        server_address = ('' if op.isfile("/.dockerenv") else "127.0.0.1", self.port)
+        httpd = HTTPServer(server_address, HTTPRequestHandler)
+        logging.info("Running server on port %d", self.port)
+        httpd.serve_forever()
+
 
 
 class GoModel(object):
@@ -248,11 +343,14 @@ class IdiotBot(GoModel):
         self.go_board.apply_move(color, move)
 
     def select_move(self, bot_color):
+        entry_points = all_empty_points(self.go_board)
+        np.random.shuffle(entry_points)
+
         move = get_first_valid_move(
             self.go_board,
             bot_color,
             # TODO: this function is gone. retrieve it.
-            generate_randomized(all_empty_points(self.go_board))
+            entry_points #generate_randomized(all_empty_points(self.go_board))
         )
 
         if move is not None:

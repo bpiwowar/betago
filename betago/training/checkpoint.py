@@ -1,12 +1,11 @@
 from __future__ import absolute_import
 import os
 
-import h5py
-from keras.models import Sequential
-from keras.optimizers import Adadelta
-from keras.layers.core import Dense, Activation
-
-from . import kerashack
+# import h5py
+# from keras.models import Sequential
+# from keras.optimizers import Adadelta
+# from keras.layers.core import Dense, Activation
+# from . import kerashack
 
 
 __all__ = [

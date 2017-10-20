@@ -110,7 +110,7 @@ class SevenPlaneFileProcessor(GoFileProcessor):
     '''
     def __init__(self, data_directory='data', num_planes=7, consolidate=True):
         super(SevenPlaneFileProcessor, self).__init__(data_directory=data_directory,
-                                                      num_planes=num_planes, consolidate=consolidate)
+                                                      num_planes=num_planes)
 
     def store_results(self, data_file, color, move, go_board):
         '''
@@ -131,12 +131,9 @@ class SevenPlaneFileProcessor(GoFileProcessor):
         '''
         row, col = move
         enemy_color = go_board.other_color(color)
-        data_file.write('GO')
+        data_file.write(b'GO')
         label = row * 19 + col
-        data_file.write(chr(label % 256))
-        data_file.write(chr(label // 256))
-        data_file.write(chr(0))
-        data_file.write(chr(0))
+        data_file.write(bytes([label % 256, label // 256, 0, 0]))
         thisbyte = 0
         thisbitpos = 0
         for plane in range(0, 7):
@@ -163,8 +160,8 @@ class SevenPlaneFileProcessor(GoFileProcessor):
                     thisbyte = thisbyte + (thisbit << (7 - thisbitpos))
                     thisbitpos = thisbitpos + 1
                     if thisbitpos == 8:
-                        data_file.write(chr(thisbyte))
+                        data_file.write(bytes([thisbyte]))
                         thisbitpos = 0
                         thisbyte = 0
         if thisbitpos != 0:
-            data_file.write(chr(thisbyte))
+            data_file.write(bytes([thisbyte]))

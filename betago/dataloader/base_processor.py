@@ -14,7 +14,7 @@ import numpy as np
 import argparse
 import multiprocessing
 from os import sys
-from keras.utils import np_utils
+# from keras.utils import np_utils
 
 from .. import gosgf
 from .goboard import GoBoard
@@ -80,7 +80,7 @@ class GoBaseProcessor(object):
     fit into memory. To avoid overflow, deactivate file consolidation by initializing with consolidate=False.
     '''
 
-    def __init__(self, data_directory='data', num_planes=7, consolidate=True):
+    def __init__(self, data_directory='data', num_planes=7):
         '''
         Parameters:
         -----------
@@ -92,7 +92,6 @@ class GoBaseProcessor(object):
         '''
         self.data_dir = data_directory
         self.num_planes = num_planes
-        self.consolidate = consolidate
 
     def process_zip(self, dir_name, zip_file_name, data_file_name, game_list):
         '''
@@ -106,7 +105,7 @@ class GoBaseProcessor(object):
         '''
         return NotImplemented
 
-    def load_go_data(self, types=['train'], data_dir='data', num_samples=1000):
+    def load_go_data(self, kgs: KGSIndex, types=['train'], data_dir='data', num_samples=1000):
         '''
         Main method to load go data.
 
@@ -116,14 +115,11 @@ class GoBaseProcessor(object):
         Parameters:
         -----------
         types: Provide a list, subset of ['train', 'test'].
-        data_dir: local folder to store data, provided as relative path.
+        index: a KGS index
         num_samples: Number of Go games to load.
         '''
-        index = KGSIndex(data_directory=self.data_dir)
-        index.download_files()
-
         for name in types:
-            sampler = Sampler(data_dir=self.data_dir)
+            sampler = Sampler(data_dir=kgs.data_directory)
             if name == 'test':
                 samples = sampler.test_games
             elif name == 'train' and num_samples is not None:
@@ -132,19 +128,9 @@ class GoBaseProcessor(object):
                 samples = sampler.draw_all_training()
 
             # Map load to CPUs, then consolidate all examples
-            self.map_to_workers(name, samples)
+            self.map_to_workers(kgs.data_directory, name, samples)
 
-            # If consolidate flag is True, consolidate. Note that merging all data into, e.g.
-            # one numpy array will be too expensive at some point.
-            if self.consolidate:
-                features_and_labels = self.consolidate_games(name, samples)
-            else:
-                print('>>> No consolidation done, single files stored in data folder')
         print('>>> Finished processing')
-        if self.consolidate:
-            return features_and_labels
-        else:
-            return
 
     def load_go_data_cli(self):
         '''
@@ -190,7 +176,7 @@ class GoBaseProcessor(object):
             first_move_done = True
         return go_board, first_move_done
 
-    def map_to_workers(self, name, samples):
+    def map_to_workers(self, kgsdir, name, samples):
         '''
         Determine the list of zip files that need to be processed, then map load
         to number of available CPUs.
@@ -211,8 +197,8 @@ class GoBaseProcessor(object):
             base_name = zip_name.replace('.tar.gz', '')
             data_file_name = base_name + name
             if not os.path.isfile(self.data_dir + '/' + data_file_name):
-                zips_to_process.append((self.__class__, self.data_dir, self.num_planes, zip_name,
-                                        data_file_name, indices_by_zip_name[zip_name]))
+                zips_to_process.append((self.__class__, kgsdir, self.num_planes, zip_name,
+                                        self.data_dir + "/" + data_file_name, indices_by_zip_name[zip_name]))
 
         # Determine number of CPU cores and split work load among them
         cores = multiprocessing.cpu_count()
@@ -378,7 +364,7 @@ class GoFileProcessor(GoBaseProcessor):
     '''
     def __init__(self, data_directory='data', num_planes=7, consolidate=True):
         super(GoFileProcessor, self).__init__(data_directory=data_directory,
-                                              num_planes=num_planes, consolidate=consolidate)
+                                              num_planes=num_planes)
 
     def store_results(self, data_file, color, move, go_board):
         '''
@@ -397,7 +383,7 @@ class GoFileProcessor(GoBaseProcessor):
         print(headerLine)
         headerLine = headerLine + "\0\n"
         headerLine = headerLine + chr(0) * (1024 - len(headerLine))
-        data_file.write(headerLine)
+        data_file.write(headerLine.encode("utf-8"))
 
     def process_zip(self, dir_name, zip_file_name, data_file_name, game_list):
         # Read zipped file and extract name list
@@ -414,7 +400,7 @@ class GoFileProcessor(GoBaseProcessor):
         print('>>> Total number of Go games in this zip: ' + str(total_examples))
 
         # Write file header
-        data_file = open(dir_name + '/' + data_file_name, 'wb')
+        data_file = open(data_file_name, 'wb')
         self.write_file_header(data_file=data_file, n=total_examples, num_planes=7, board_size=19, bits_per_pixel=1)
 
         # Write body and close file
@@ -440,49 +426,5 @@ class GoFileProcessor(GoBaseProcessor):
                         first_move_done = True
             else:
                 raise ValueError(name + ' is not a valid sgf')
-        data_file.write('END')
+        data_file.write(b'END')
         data_file.close()
-
-    def consolidate_games(self, name, samples):
-        print('>>> Creating consolidated .dat...')
-        file_path = self.data_dir + '/kgsgo_' + name
-        if os.path.isfile(file_path):
-            print('>>> File ' + file_path + ' already exists')
-            return
-
-        files_needed = set(file_name for file_name, index in samples)
-        print('>>> Total dat files to be consolidated: ' + str(len(files_needed)))
-
-        # Collect names of data files
-        data_file_names = []
-        for zip_file_name in files_needed:
-            data_file_name = zip_file_name.replace('.tar.gz', '') + name
-            data_file_names.append(data_file_name)
-
-        # Count total number of moves
-        num_records = 0
-        for data_file_name in data_file_names:
-            if not os.path.isfile(self.data_dir + '/' + data_file_name):
-                print('>>> Missing file: ' + data_file_name)
-                sys.exit(-1)
-            child = open(self.data_dir + '/' + data_file_name, 'rb')
-            header = child.read(1024)
-            this_n = int(header.split('-n=')[1].split('-')[0])
-            child.close()
-            num_records = num_records + this_n
-
-        # Write content to consolidate file
-        consolidated_file = open(file_path, 'wb')
-        self.write_file_header(consolidated_file, num_records, self.num_planes, 19, 1)
-        for filename in data_file_names:
-            print('>>> Reading from ' + filename + ' ...')
-            file_path = self.data_dir + '/' + filename
-            single_dat = open(file_path, 'rb')
-            single_dat.read(1024)
-            data = single_dat.read()
-            if data[-3:] != 'END':
-                raise Exception('Invalid file, doesnt end with END: ' + file_path)
-            consolidated_file.write(data[:-3])
-            single_dat.close()
-        consolidated_file.write('END')
-        consolidated_file.close()

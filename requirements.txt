@@ -3,5 +3,5 @@ flask
 flask-cors
 future
 h5py
-tensorflow
+#tensorflow
 six
