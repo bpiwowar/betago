@@ -117,6 +117,20 @@ def direct_policy_train(cfg, args):
 
 # --- Model testing
 
+def getmodel(model, parameters, load=True):
+    from .model import ModelBot, GoModel
+
+    m = importlib.import_module(model)
+    if issubclass(m.Model, GoModel):
+        return m.Model()
+
+    model = m.Model(args.parameters)
+    if load:
+        model.load()
+    return ModelBot(model=model, processor=model.processor)
+
+
+
 @argument('--host', default='localhost', help='host to listen to')
 @argument('--port', '-p', type=int, default=8080, help='Port the web server should listen on (default 8080).')
 @argument("model", help="Name of the model (corresponds to a python module)")
@@ -126,12 +140,9 @@ def demo(cfg, args):
     from .model import ModelBot, HTTPFrontend
 
     m = importlib.import_module(args.model)
-    model = m.Model(args.parameters)
+    bot = getmodel(args.model, args.parameters)
 
-    model.load()
-
-    go_model = ModelBot(model=model, processor=model.processor)
-    go_server = HTTPFrontend(bot=go_model, port=args.port)
+    go_server = HTTPFrontend(bot=bot, port=args.port)
     go_server.run()
 
 
@@ -144,10 +155,7 @@ def gtp(cfg, args):
     from .model import ModelBot, HTTPFrontend
     from .gtp import GTPFrontend
 
-    m = importlib.import_module(args.model)
-    model = m.Model(args.parameters)
-
-    model.load()
+    model = getmodel(args.model, args.parameters)
 
     logging.info("Starting GTP frontend")
     frontend = GTPFrontend(bot=ModelBot(model))
@@ -168,15 +176,8 @@ def simulate(cfg, args):
     import betago.simulate as simulate
 
     # Load models
-    m1 = importlib.import_module(args.model1)
-    model1 = m1.Model(args.parameters1)
-    model1.load()
-    black_bot = ModelBot(model1)
-
-    m2 = importlib.import_module(args.model2)
-    model2 = m2.Model(args.parameters2)
-    model2.load()
-    white_bot = ModelBot(model2)
+    black_bot = getmodel(args.model1, args.parameters1)
+    white_bot = getmodel(args.model2, args.parameters2)
 
     # Simulate
     board = goboard.GoBoard()

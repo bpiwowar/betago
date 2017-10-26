@@ -205,10 +205,11 @@ class GoModel(object):
         model: In principle this can be anything that can predict go moves, given data provided by the above
                processor. In practice it may very well be (an extension of) a keras model plus glue code.
         '''
-        self.model = model
-        self.processor = processor
         self.go_board = GoBoard(19)
-        self.num_planes = processor.num_planes
+        if model:
+            self.model = model
+            self.processor = processor
+            self.num_planes = processor.num_planes
 
     def set_board(self, board):
         '''Set the board to a specific state.'''
@@ -254,6 +255,9 @@ def fill_dame(board):
         yield None
     for dame_point in generate_in_random_order(status.dame_points):
         yield dame_point
+
+
+
 
 class BaseModel:
     '''Base model for all learned models'''
