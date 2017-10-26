@@ -1,136 +1,60 @@
 # This Source Code Form is subject to the terms of the Mozilla Public License,
 # v. 2.0. If a copy of the MPL was not distributed with this file, You can
 # obtain one at http://mozilla.org/MPL/2.0/.
-from __future__ import print_function
-from __future__ import absolute_import
 import os
 import random
 from .index_processor import KGSIndex
-from six.moves import range
 
+
+
+class SingleSampler:
+    def __init__(self, string):
+        a = [int(x) if x else None for x in string.split(":")]
+        self.game_ratio = a.pop(0) / 100
+        self.game_max = a.pop(0) if a else None
+        self.board_ratio = a.pop(0) / 100 if a else 100
+        self.board_max = a.pop(0) if a else None
+        assert self.game_ratio <= 100 and self.game_ratio >= 0
+        assert self.board_ratio <= 100 and self.game_ratio >= 0
+    
+    def __repr__(self):
+        return "%.d%% games (max %s), %d%% boards (max %s)" % \
+            (self.game_ratio * 100, self.game_max, self.board_ratio * 100, self.board_max)
+
+    def __str__(self):
+        s = "%.d" % (self.game_ratio * 100)
+        if self.game_max: s += "-" + str(self.game_max)
+        s += "_%d" % (self.board_ratio * 100)
+        if self.board_max: s += "-" + str(self.board_max)
+        return s
 
 class Sampler(object):
+    TRAIN = 0
+    VALIDATION = 1
+    TEST = 2
+    IGNORE = 3
+
     '''
     Sample training and test data from zipped sgf files such that test data is kept stable.
     '''
+    def __init__(self, train: SingleSampler, val: SingleSampler, test: SingleSampler, *, 
+        seed=0):
+        self.samplers = [train, val, test]
+        self.random = random.Random(seed)
 
-    def __init__(self, data_dir='data', num_test_games=100, cap_year=2015, seed=1337):
-        self.data_dir = data_dir
-        self.num_test_games = num_test_games
-        self.test_games = []
-        self.train_games = []
-        self.test_folder = 'test_samples.py'
-        self.cap_year = cap_year
+    def game(self):
+        '''Returns whether the game should be sampled for train, val, test or ignored'''
+        x = self.random.uniform(0,1)
 
-        random.seed(seed)
-        self.compute_test_samples()
+        for mode in [Sampler.TRAIN, Sampler.VALIDATION, Sampler.TEST]:
+            x -= self.samplers[mode].game_ratio
+            if x < 0: 
+                return mode
 
-    def draw_samples(self, num_sample_games):
-        '''
-        Draw num_sample_games many training games from index.
-        '''
-        available_games = []
-        index = KGSIndex(data_directory=self.data_dir)
+        return Sampler.IGNORE
 
-        for fileinfo in index.file_info:
-            filename = fileinfo['filename']
-            year = int(filename.split('-')[1].split('_')[0])
-            if year > self.cap_year:
-                continue
-            num_games = fileinfo['num_games']
-            for i in range(num_games):
-                available_games.append((filename, i))
-        print('>>> Total number of games used: ' + str(len(available_games)))
+    def sample_board(self, mode):
+        return self.random.uniform(0,1) < self.samplers[mode].board_ratio
 
-        sample_set = set()
-        while len(sample_set) < num_sample_games:
-            sample = random.choice(available_games)
-            if sample not in sample_set:
-                sample_set.add(sample)
-        print('Drawn ' + str(num_sample_games) + ' samples:')
-        return list(sample_set)
 
-    def draw_training_games(self):
-        '''
-        Get list of all non-test games, that are no later than dec 2014
-        Ignore games after cap_year to keep training data stable
-        '''
-        index = KGSIndex(data_directory=self.data_dir)
-        for file_info in index.file_info:
-            filename = file_info['filename']
-            year = int(filename.split('-')[1].split('_')[0])
-            if year > self.cap_year:
-                continue
-            numgames = file_info['num_games']
-            for i in range(numgames):
-                sample = (filename, i)
-                if sample not in self.test_games:
-                    self.train_games.append(sample)
-        print('total num training games: ' + str(len(self.train_games)))
 
-    def compute_test_samples(self):
-        '''
-        If not already existing, create local file to store fixed set of test samples
-        '''
-        if not os.path.isfile(self.test_folder):
-            test_games = self.draw_samples(self.num_test_games)
-            test_sample_file = open(self.test_folder, 'w')
-            for sample in test_games:
-                test_sample_file.write(str(sample) + "\n")
-            test_sample_file.close()
-
-        test_sample_file = open(self.test_folder, 'r')
-        sample_contents = test_sample_file.read()
-        test_sample_file.close()
-        for line in sample_contents.split('\n'):
-            if line != "":
-                (filename, index) = eval(line)
-                self.test_games.append((filename, index))
-
-    def draw_training_samples(self, num_sample_games):
-        '''
-        Draw training games, not overlapping with any of the test games.
-        '''
-        available_games = []
-        index = KGSIndex(data_directory=self.data_dir)
-        for fileinfo in index.file_info:
-            filename = fileinfo['filename']
-            year = int(filename.split('-')[1].split('_')[0])
-            if year > self.cap_year:
-                continue
-            numgames = fileinfo['num_games']
-            for i in range(numgames):
-                available_games.append((filename, i))
-        print('total num games: ' + str(len(available_games)))
-
-        sample_set = set()
-        while len(sample_set) < num_sample_games:
-            sample = random.choice(available_games)
-            if sample not in self.test_games:
-                sample_set.add(sample)
-        print('Drawn ' + str(num_sample_games) + ' samples:')
-        return list(sample_set)
-
-    def draw_all_training(self):
-        '''
-        Draw all available training games.
-        '''
-        available_games = []
-        index = KGSIndex(data_directory=self.data_dir)
-
-        for fileinfo in index.file_info:
-            filename = fileinfo['filename']
-            year = int(filename.split('-')[1].split('_')[0])
-            if year > self.cap_year:
-                continue
-            numgames = fileinfo['numGames']
-            for i in range(numgames):
-                available_games.append((filename, i))
-        print('total num games: ' + str(len(available_games)))
-
-        sample_set = set()
-        for sample in available_games:
-            if sample not in self.test_samples:
-                sample_set.add(sample)
-        print('Drawn all samples, ie ' + str(len(sample_set)) + ' samples:')
-        return list(sample_set)

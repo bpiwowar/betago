@@ -14,10 +14,11 @@ import re
 import cgi
 import json
 import inspect
-
+from pathlib import Path
 import numpy as np
 from . import scoring
 from .dataloader.goboard import GoBoard
+from .dataloader.base_processor import GoBaseProcessor
 from .processor import ThreePlaneProcessor
 from six.moves import range
 
@@ -56,11 +57,11 @@ class route:
 
     def process(self, http):
         m = self.pathre.match(http.path)
-        logging.info("=== Matching %s with %s [%s]...", http.path, self.pathre, not(m is None))
+        logging.debug("Matching %s with %s [%s]...", http.path, self.pathre, not(m is None))
         if not m: 
             return False
 
-        logging.info("Processing with %s [%s]...", self.method, m.groupdict())
+        logging.info("Processing with %s [%s]...", self.method.__name__, m.groupdict())
 
         values = m.groupdict()
         args = []
@@ -75,7 +76,7 @@ class route:
             else:
                 kwargs[k] = values.get(k, v.default)
 
-        logging.info("Calling %s with %s and %s", self.method, args, kwargs)
+        logging.debug("Calling %s with %s and %s", self.method, args, kwargs)
         output = self.method(*args, **kwargs)
         self.send_headers(http, size=len(output))
         http.wfile.write(output)
@@ -118,12 +119,12 @@ class HTTPFrontend():
 
             def do_POST(self):
                 ctype, pdict = cgi.parse_header(self.headers['content-type'])
-                logging.info("Handling post of content-type: %s", ctype)
+                logging.debug("Handling post of content-type: %s", ctype)
                 if ctype == 'application/json':
-                    logging.info("File is %s / %s", self.rfile, self.headers["content-length"])
+                    logging.debug("File is %s / %s", self.rfile, self.headers["content-length"])
                     s = self.rfile.read(int(self.headers["content-length"]))
                     self.json = json.loads(s)
-                    logging.info("JSON payload: %s", self.json)
+                    logging.debug("JSON payload: %s", self.json)
                 else:
                     raise Exception("Cannot handle content-type %s", ctype)
 
@@ -176,13 +177,11 @@ class HTTPFrontend():
                 content = request.json
                 col = content['i']
                 row = content['j']
-                print('Received move:')
-                print((col, row))
+                logging.info('Received move: %s', (row, col))
                 self.bot.apply_move('b', (row, col))
 
                 bot_row, bot_col = self.bot.select_move('w')
-                print('Prediction:')
-                print((bot_col, bot_row))
+                logging.info('Predicted move: %s', (bot_col, bot_row))
                 result = {'i': bot_col, 'j': bot_row}
                 json_result = json.dumps(result)
                 return json_result.encode("utf-8")
@@ -224,15 +223,114 @@ class GoModel(object):
         return NotImplemented
 
 
-class KerasBot(GoModel):
+
+def get_first_valid_move(board, color, move_generator):
+    for move in move_generator:
+        if move is None or board.is_move_legal(color, move):
+            return move
+    return None
+
+def generate_in_random_order(point_list):
+    """Yield all points in the list in a random order."""
+    point_list = copy.copy(point_list)
+    random.shuffle(point_list)
+    for candidate in point_list:
+        yield candidate
+
+
+def all_empty_points(board):
+    """Return all empty positions on the board."""
+    empty_points = []
+    for point in product(list(range(board.board_size)), list(range(board.board_size))):
+        if point not in board.board:
+            empty_points.append(point)
+    return empty_points
+
+
+def fill_dame(board):
+    status = scoring.evaluate_territory(board)
+    # Pass when all dame are filled.
+    if status.num_dame == 0:
+        yield None
+    for dame_point in generate_in_random_order(status.dame_points):
+        yield dame_point
+
+class BaseModel:
+    '''Base model for all learned models'''
+    def __init__(self, parameterspath: Path):
+        self.parameterspath = parameterspath
+
+    def load(self):
+        pass
+        
+try:
+    import torch
+
+    # Move to model
+    class TorchModel(torch.nn.Module, BaseModel):
+        def __init__(self, parameterspath: Path):
+            BaseModel.__init__(self, parameterspath)
+            torch.nn.Module.__init__(self)
+            self.epoch = 0
+            self.optimizer = None
+
+        def init(self, processor: GoBaseProcessor, boardsize: int):
+            self.processor = processor
+            self.numplanes = processor.num_planes
+            self.boardsize = boardsize
+
+        def load(self):
+            with self.parameterspath.open('rb') as fp:
+                state = torch.load(fp)
+
+            self.init(GoBaseProcessor.load(state["processor"]), state["boardsize"])
+
+            self.epoch = state["epoch"]
+            self.load_state_dict(state["state_dict"])
+            self.optimizer.load_state_dict(state["optimizer"])
+
+        
+        def restore(self):
+            if self.parameterspath.is_file():
+                self.load()
+                logging.info("Restored model (epoch %d)", self.epoch)
+                return True
+            return False
+
+        def save_checkpoint(self):
+            state = {
+                'epoch': self.epoch + 1,
+                'state_dict': self.state_dict(),
+                'optimizer' : self.optimizer.state_dict(),
+                'processor': self.processor.to_json(),
+                'boardsize': self.boardsize
+            }   
+            tmpfilepath = self.parameterspath.with_suffix(".tmp")
+            with open(tmpfilepath, "wb") as fp:
+                torch.save(state, fp)
+            tmpfilepath.replace(self.parameterspath)
+
+        def train(self, boards, labels):
+            raise NotImplemented
+        def cost(self, boards, labels):
+            raise NotImplemented
+        def predict(self, board):
+            raise NotImplemented
+
+except ImportError as e:
+    if e.name == 'torch':
+        logging.debug("torch is not installed: skipping torch model [%s]", e.name)
+    raise
+
+class ModelBot(GoModel):
     '''
-    KerasBot takes top_n predictions of a keras model and tries to apply the best move. If that move is illegal,
+    ModelBot takes top_n predictions of a model and tries to apply the best move. If that move is illegal,
     choose the next best, until the list is exhausted. If no more moves are left to play, continue with random
     moves until a legal move is found.
     '''
 
-    def __init__(self, model, processor, top_n=10):
-        super(KerasBot, self).__init__(model=model, processor=processor)
+    def __init__(self, model, top_n=10):
+        super(ModelBot, self).__init__(model=model, processor=model.processor)
         self.top_n = top_n
 
     def apply_move(self, color, move):
@@ -262,7 +360,7 @@ class KerasBot(GoModel):
         # Turn the board into a feature vector.
         # The (0, 0) is for generating the label, which we ignore.
         X, label = self.processor.feature_and_label(
-            bot_color, (0, 0), self.go_board, self.num_planes)
+            bot_color, (0, 0), self.go_board)
         X = X.reshape((1, X.shape[0], X.shape[1], X.shape[2]))
 
         # Generate bot move.
@@ -276,14 +374,14 @@ class KerasBot(GoModel):
             yield pred_move
 
 
-class RandomizedKerasBot(GoModel):
+class RandomizedModelBot(GoModel):
     '''
     Takes a weighted sample from the predictions of a keras model. If none of those moves is legal,
     pick a random move.
     '''
 
     def __init__(self, model, processor):
-        super(RandomizedKerasBot, self).__init__(model=model, processor=processor)
+        super(RandomizedModelBot, self).__init__(model=model, processor=processor)
 
     def apply_move(self, color, move):
         # Apply human move
@@ -330,62 +428,3 @@ class RandomizedKerasBot(GoModel):
             pred_col = prediction % 19
             yield (pred_row, pred_col)
 
-
-class IdiotBot(GoModel):
-    '''
-    Play random moves, like a good 30k bot.
-    '''
-
-    def __init__(self, model=None, processor=ThreePlaneProcessor()):
-        super(IdiotBot, self).__init__(model=model, processor=processor)
-
-    def apply_move(self, color, move):
-        self.go_board.apply_move(color, move)
-
-    def select_move(self, bot_color):
-        entry_points = all_empty_points(self.go_board)
-        np.random.shuffle(entry_points)
-
-        move = get_first_valid_move(
-            self.go_board,
-            bot_color,
-            # TODO: this function is gone. retrieve it.
-            entry_points #generate_randomized(all_empty_points(self.go_board))
-        )
-
-        if move is not None:
-            self.go_board.apply_move(bot_color, move)
-        return move
-
-
-def get_first_valid_move(board, color, move_generator):
-    for move in move_generator:
-        if move is None or board.is_move_legal(color, move):
-            return move
-    return None
-
-
-def generate_in_random_order(point_list):
-    """Yield all points in the list in a random order."""
-    point_list = copy.copy(point_list)
-    random.shuffle(point_list)
-    for candidate in point_list:
-        yield candidate
-
-
-def all_empty_points(board):
-    """Return all empty positions on the board."""
-    empty_points = []
-    for point in product(list(range(board.board_size)), list(range(board.board_size))):
-        if point not in board.board:
-            empty_points.append(point)
-    return empty_points
-
-
-def fill_dame(board):
-    status = scoring.evaluate_territory(board)
-    # Pass when all dame are filled.
-    if status.num_dame == 0:
-        yield None
-    for dame_point in generate_in_random_order(status.dame_points):
-        yield dame_point
