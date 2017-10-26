@@ -253,6 +253,8 @@ class GoDataProcessor(GoBaseProcessor):
         return NotImplemented
      
     def process_zip(self, path, queue, sampler, boardsize):
+        from .data import BitStream, BinaryRepresentation
+
         # Read zipped file and extract name list
         logging.info("Processing file %s", path)
         

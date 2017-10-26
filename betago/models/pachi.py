@@ -4,33 +4,16 @@ import subprocess
 import re
 import argparse
 
-from keras.models import model_from_yaml
-from betago.model import KerasBot
+from betago.model import GoModel
 from betago.processor import SevenPlaneProcessor
 from betago.gtp.board import gtp_position_to_coords, coords_to_gtp_position
 
-argparser = argparse.ArgumentParser()
-argparser.add_argument('handicap', type=int, nargs=1)
-argparser.add_argument('output_sgf', nargs='?', default='output.sgf')
-args = argparser.parse_args()
+class Model(GoModel):
+    pass
 
-processor = SevenPlaneProcessor()
-
-bot_name = '100_epochs_cnn'
-model_file = 'model_zoo/' + bot_name + '_bot.yml'
-weight_file = 'model_zoo/' + bot_name + '_weights.hd5'
-
-with open(model_file, 'r') as f:
-    yml = yaml.load(f)
-    model = model_from_yaml(yaml.dump(yml))
-    # Note that in Keras 1.0 we have to recompile the model explicitly
-    model.compile(loss='categorical_crossentropy', optimizer='adadelta', metrics=['accuracy'])
-    model.load_weights(weight_file)
-
-bot = KerasBot(model=model, processor=processor)
-
-gnugo_cmd = ["gnugo", "--mode", "gtp"]
-p = subprocess.Popen(gnugo_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    
+pachi_cmd = ["pachi"]
+p = subprocess.Popen(pachi_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 
 
 def send_command(gtpStream, cmd):
@@ -108,9 +91,9 @@ while passes < 2:
     else:
         send_command(p, "genmove " + colors[their_color] + "\n")
         pos = get_response(p)
-        if(pos == 'RESIGN'):
+        if(pos == 'resign'):
             passes = 2
-        elif(pos == 'PASS'):
+        elif(pos == 'pass'):
             sgf = sgf + ";" + their_color.upper() + "[]\n"
             passes = passes + 1
         else:

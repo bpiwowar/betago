@@ -11,48 +11,9 @@ import re
 from .dataloader.data import Dataset
 from .dataloader.base_processor import GoBaseProcessor
 from .dataloader.sampling import SingleSampler, Sampler
+from .commands import Command, command, argument, commands
 
 logging.basicConfig(level=logging.INFO)
-
-# --- Commands
-
-commands = {}
-
-class Command:
-    def __init__(self, method, description=None):
-        self.method = method
-        self.name = method.__name__ 
-        self.parser = argparse.ArgumentParser(self.name, description=description)
-        self.arguments = []
-
-    def __repr__(self):
-        return "Command(%s)" % (self.name)
-
-    def __call__(self, cfg, args):
-        logging.debug("Parsing remaining arguments: %s", args.arguments)
-        for posargs, kwargs in self.arguments:
-            self.parser.add_argument(*posargs, **kwargs)
-        self.parser.add_argument("arguments", nargs=argparse.REMAINDER, help="Arguments")
-        pargs = self.parser.parse_args(args.arguments)
-        self.method(cfg, pargs)
-
-class argument:
-    def __init__(self, *args, **kwargs):
-        self.args = args
-        self.kwargs = kwargs
-    
-    def __call__(self, command):
-        command.arguments.insert(0, (self.args, self.kwargs))
-        return command
-
-class command:
-    def __init__(self, description=None):
-        self.description = description
-
-    def __call__(self, m):
-        c = Command(m, description=self.description)
-        commands[c.name.replace("_", "-")] = c
-        return c
 
 
 # ---- Go Games data pre-processing
@@ -92,8 +53,11 @@ def prepare(cfg, args):
     dirname = args.processor
     dirname += '%d-%d-train-%s-val-%s-test-%s' % (args.seed, args.boardsize, args.train, args.validation, args.test)
     datadir = cfg.datadirectory.joinpath(dirname)
+
     logging.info("Outputs in directory %s", datadir)
-    datadir.mkdir(exist_ok=False)
+    datadir.mkdir(exist_ok=True)
+    if datadir.joinpath("information.json").file_exists():
+        raise Exception("information.json file exist - dataset already pre-processed")
 
     processor = processorclass()
     sampler = Sampler(args.train, args.validation, args.test, seed=0)
@@ -130,7 +94,7 @@ def direct_policy_train(cfg, args):
     ds = Dataset(args.data)
 
     m = importlib.import_module(args.model)
-    model = m.Model(args.parameters)
+    model = m.Model(args.arguments, args.parameters)
 
     if not args.reset and not model.restore():
         model.init(ds.processor, ds.boardsize)
