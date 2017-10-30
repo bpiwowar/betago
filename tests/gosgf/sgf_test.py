@@ -4,7 +4,7 @@
 import unittest
 from textwrap import dedent
 
-from betago import gosgf
+from gammago import gosgf
 
 SAMPLE_SGF = b"""\
 (;AP[testsuite:0]CA[utf-8]DT[2009-06-06]FF[4]GM[1]KM[7.5]PB[Black engine]

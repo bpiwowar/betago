@@ -1,7 +1,7 @@
 import numpy as np
 
-from betago.model import BaseModel
-from betago.processor import ThreePlaneProcessor
+from gammago.model import BaseModel
+from gammago.processor import ThreePlaneProcessor
 
 class Model(BaseModel):
     '''

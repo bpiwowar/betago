@@ -1,6 +1,6 @@
 import unittest
 
-from betago.gtp import command
+from gammago.gtp import command
 
 
 class CommandTestCase(unittest.TestCase):

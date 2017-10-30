@@ -2,7 +2,7 @@
 
 import unittest
 
-from betago.gosgf import sgf_grammar
+from gammago.gosgf import sgf_grammar
 
 
 class SgfGrammarTestCase(unittest.TestCase):

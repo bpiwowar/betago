@@ -160,7 +160,7 @@ def web(cfg, args):
 
 @argument('--host', default='localhost', help='host to listen to')
 @argument('--port', '-p', type=int, default=8080, help='Port the web server should listen on (default 8080).')
-@argument("model", help="Model name (module in betago.models)")
+@argument("model", help="Model name (module in gammago.models)")
 @argument("parameters", nargs="?", help="Model parameters")
 @command(description='Start a GTP server')
 def gtp(cfg, args):
@@ -175,17 +175,17 @@ def gtp(cfg, args):
 
 
 
-@argument("model1", help="Model name (module in betago.models)")
+@argument("model1", help="Model name (module in gammago.models)")
 @argument("parameters1", help="Model 1 parameters (empty string if none)")
-@argument("model2", help="Model name (module in betago.models)")
+@argument("model2", help="Model name (module in gammago.models)")
 @argument("parameters2", help="Model 2 parameters  (empty string if none)")
 @argument('--komi', '-k', type=float, default=5.5)
 @command(description='Simulate a game between two bots')
 def simulate(cfg, args):
     from .model import ModelBot, HTTPFrontend
     from .dataloader import goboard
-    import betago.scoring as scoring
-    import betago.simulate as simulate
+    import gammago.scoring as scoring
+    import gammago.simulate as simulate
 
     black_bot = getbot(args.model1, args.parameters1)
     white_bot = getbot(args.model2, args.parameters2)
@@ -220,10 +220,10 @@ class Configuration:
     def datadirectory(self):
         return self.datadir.joinpath("processed")
         
-parser = argparse.ArgumentParser(description='betago')
+parser = argparse.ArgumentParser(description='gammago')
 
 parser.add_argument("--verbose", action="store_true", help="Be verbose")
-parser.add_argument("--debug", action="store_true", help="Be even more verbose (implies traceback)")
+parser.add_argument("--debug", action="store_true", help="Be even more verbose")
 parser.add_argument("--profile", help="Output profile file (turns profiling on)")
 parser.add_argument("--data", help="Data directory (default: data of the current directory)", default=str(pathlib.Path.cwd().joinpath("data")))
 

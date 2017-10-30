@@ -202,7 +202,7 @@ class GoModel(object):
         '''
         Parameters:
         -----------
-        processor: Instance of betago.processor.GoDataLoader, e.g. SevenPlaneProcessor
+        processor: Instance of gammago.processor.GoDataLoader, e.g. SevenPlaneProcessor
         model: In principle this can be anything that can predict go moves, given data provided by the above
                processor. In practice it may very well be (an extension of) a keras model plus glue code.
         '''
@@ -256,7 +256,7 @@ def fill_dame(board):
 
 
 
-from betago.commands import argument
+from gammago.commands import argument
 
 class BaseModel:
     '''Base model for all learned models'''
@@ -281,6 +281,7 @@ try:
             self.processor = processor
             self.numplanes = processor.num_planes
             self.boardsize = boardsize
+            self.construct()
 
         def load(self, path):
             with open(path, 'rb') as fp:
@@ -288,7 +289,6 @@ try:
 
             processor = GoBaseProcessor.load(state["processor"])
             self.init(processor, state["boardsize"], state)
-            self.construct()
             self.epoch = state["epoch"]
             self.load_state_dict(state["state_dict"])
             self.optimizer.load_state_dict(state["optimizer"])
@@ -321,6 +321,8 @@ try:
 
             tmpfilepath.replace(path)
 
+        def construct(self):
+            raise NotImplemented
         def train(self, boards, labels):
             raise NotImplemented
         def cost(self, boards, labels):

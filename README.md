@@ -83,7 +83,7 @@ Launch a go game with a demo bot (you have to open a web page)
 
 ```./gammago demo [--port] MODEL_PATH```
 
-where `MODEL_PATH` is either a model name (e.g. `betago.models.idiot`), or a parameter file.
+where `MODEL_PATH` is either a model name (e.g. `gammago.models.idiot`), or a parameter file.
 
 
 
@@ -93,7 +93,7 @@ where `MODEL_PATH` is either a model name (e.g. `betago.models.idiot`), or a par
 
 ## Pre-defined models
 
-- `betago.models.gnugo`
+- `gammago.models.gnugo`
 
 ## Literature
 

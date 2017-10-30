@@ -1,6 +1,6 @@
 import unittest
 
-from betago.gtp import command, response
+from gammago.gtp import command, response
 
 
 class ResponseTestCase(unittest.TestCase):

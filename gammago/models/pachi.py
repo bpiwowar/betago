@@ -4,9 +4,9 @@ import subprocess
 import re
 import argparse
 
-from betago.model import GoModel
-from betago.processor import SevenPlaneProcessor
-from betago.gtp.board import gtp_position_to_coords, coords_to_gtp_position
+from gammago.model import GoModel
+from gammago.processor import SevenPlaneProcessor
+from gammago.gtp.board import gtp_position_to_coords, coords_to_gtp_position
 
 class Model(GoModel):
     pass

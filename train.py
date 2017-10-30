@@ -9,11 +9,11 @@ import time
 import numpy as np
 import six.moves.queue as queue
 
-from betago.corpora import build_index, find_sgfs, load_index, store_index
-from betago.gosgf import Sgf_game
-from betago.dataloader import goboard
-from betago.processor import SevenPlaneProcessor
-from betago.training import TrainingRun
+from gammago.corpora import build_index, find_sgfs, load_index, store_index
+from gammago.gosgf import Sgf_game
+from gammago.dataloader import goboard
+from gammago.processor import SevenPlaneProcessor
+from gammago.training import TrainingRun
 
 
 def index(args):
@@ -48,7 +48,7 @@ def _load_network_by_name(name):
         mod = _load_module_from_filename(name)
     else:
         try:
-            mod = importlib.import_module('betago.' + name)
+            mod = importlib.import_module('gammago.' + name)
         except ImportError:
             mod = importlib.import_module(name)
     if not hasattr(mod, 'layers'):

@@ -60,8 +60,8 @@ docs/_build/
 target/
 
 # Ignore data folders
-betago/data/*
-betago/dataloader/data/*
+gammago/data/*
+gammago/dataloader/data/*
 examples/data/*
 data
 
@@ -70,8 +70,8 @@ data
 
 
 # Hide test samples script
-betago/dataloader/test_samples.py
-betago/test_samples.py
+gammago/dataloader/test_samples.py
+gammago/test_samples.py
 examples/test_samples.py
 
 *.ipynb_checkpoints

@@ -2,6 +2,6 @@
 
 path="$(dirname "$0")"
 PYTHONPATH=$path
-python3 -m betago gtp "$@"
+python3 -m gammago gtp "$@"
 
-# betago.models.basic parameters.dat
+# gammago.models.basic parameters.dat

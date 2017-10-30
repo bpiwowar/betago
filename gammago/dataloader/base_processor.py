@@ -195,6 +195,10 @@ class GoBaseProcessor(object):
                         pool.terminate()
                         pool.join()
                         raise v
+
+                    elif v[0] != Sampler.TRAIN:
+                        # If not train, write to disk directly
+                        process(v)
                         
                     elif len(buffer) < buffer_size:
                         buffer.append(v)

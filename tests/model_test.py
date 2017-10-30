@@ -2,8 +2,8 @@ import unittest
 
 import six
 
-from betago import model
-from betago.dataloader import goboard
+from gammago import model
+from gammago.dataloader import goboard
 
 
 class ModelTestCase(unittest.TestCase):

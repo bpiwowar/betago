@@ -92,7 +92,7 @@ def _walk_dir(path):
 
 @contextmanager
 def tarball_iterator(tarball_path):
-    tempdir = tempfile.mkdtemp(prefix='tmp-betago')
+    tempdir = tempfile.mkdtemp(prefix='tmp-gammago')
     tf = tarfile.open(tarball_path)
 
     # Check for unsafe filenames. Theoretically a tarball can contain

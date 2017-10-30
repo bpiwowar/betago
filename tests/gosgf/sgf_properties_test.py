@@ -3,7 +3,7 @@
 import unittest
 from textwrap import dedent
 
-from betago.gosgf import sgf_properties
+from gammago.gosgf import sgf_properties
 
 
 class SgfPropertiesTestCase(unittest.TestCase):
