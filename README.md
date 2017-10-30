@@ -12,15 +12,14 @@ The only pre-requisite needed is numpy; you should install your favorite
 machine learning toolkit. At the moment, there is a base class and examples 
 for PyTorch.
 
-Using docker, you can use 
-
-```docker ```
 
 # Commands
+
 
 ## Downloading KGS data
 
 To download or update GO games
+
 ```
 ./gammago kgs
 ```
@@ -51,7 +50,22 @@ Each argument is optional; for instance `--train .5::.3` will sample 50% of the 
 
 ## Training
 
-```./gammago direct-policy-train [--batchsize BATCHSIZE] [--checkpoint CHECKPOINT] MODEL PARAMETER [MODEL OPTIONS]```
+### Direct training
+
+```./gammago direct-policy-train [--batchsize BATCHSIZE] [--checkpoint CHECKPOINT] MODEL MODEL_FILE [MODEL OPTIONS]```
+
+where
+
+- `--batchsize BATCHSIZE` gives the training batchsize
+- `--checkpoint CHECKPOINT` gives the number of iterations before 
+- `--iterations ITERATIONS` is the number of iterations
+- `--reset` resets the model instead of continuing to train with it
+- `MODEL_PATH` is the file or directory that will contain all the information necessary to run the model
+- `MODEL OPTIONS` are options specific to the model (must be serialized with the information)
+
+### Training by competition
+
+```./gammago direct-policy-train [--batchsize BATCHSIZE] [--checkpoint CHECKPOINT] PARAMETERS```
 
 where
 
@@ -67,13 +81,19 @@ where
 
 Launch a go game with a demo bot (you have to open a web page)
 
-```./gammago demo```
+```./gammago demo [--port] MODEL_PATH```
+
+where `MODEL_PATH` is either a model name (e.g. `betago.models.idiot`), or a parameter file.
 
 
 
 
 
 # Misc
+
+## Pre-defined models
+
+- `betago.models.gnugo`
 
 ## Literature
 

@@ -16,6 +16,26 @@ class SingleSampler:
         self.board_max = a.pop(0) if a else None
         assert self.game_ratio <= 100 and self.game_ratio >= 0
         assert self.board_ratio <= 100 and self.game_ratio >= 0
+        
+        self.board_count = 0
+        self.game_count = 0
+
+    def sample_game(self):
+        if not self.game_max: 
+            return True
+        if self.game_count < self.game_max:
+            self.game_count += 1
+            return True
+        return False
+    
+    def sample_board(self):
+        if not self.board_max: 
+            return True
+        if self.board_count < self.board_max:
+            self.board_count += 1
+            return True
+        return False
+            
     
     def __repr__(self):
         return "%.d%% games (max %s), %d%% boards (max %s)" % \
@@ -49,12 +69,16 @@ class Sampler(object):
         for mode in [Sampler.TRAIN, Sampler.VALIDATION, Sampler.TEST]:
             x -= self.samplers[mode].game_ratio
             if x < 0: 
-                return mode
+                if self.samplers[mode].sample_game():
+                    return mode
+                return Sampler.IGNORE            
 
         return Sampler.IGNORE
 
     def sample_board(self, mode):
-        return self.random.uniform(0,1) < self.samplers[mode].board_ratio
+        if self.random.uniform(0,1) < self.samplers[mode].board_ratio:
+            return self.samplers[mode].sample_board()
+        return False
 
 
 

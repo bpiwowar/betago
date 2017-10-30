@@ -150,6 +150,8 @@ class GoBaseProcessor(object):
         Determine the list of zip files that need to be processed, then map load
         to number of available CPUs.
         '''
+        from .data import BinaryRepresentation
+        
         # Transform the above dictionary to a list that can be processed in parallel
         cores = multiprocessing.cpu_count() if not cores else cores
         manager = multiprocessing.Manager()

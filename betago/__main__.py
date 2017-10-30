@@ -7,11 +7,12 @@ import pathlib
 import importlib
 from pathlib import Path
 import re
+import pickle
 
 from .dataloader.data import Dataset
 from .dataloader.base_processor import GoBaseProcessor
 from .dataloader.sampling import SingleSampler, Sampler
-from .commands import Command, command, argument, commands
+from .commands import Command, command, argument, commands, configure
 
 logging.basicConfig(level=logging.INFO)
 
@@ -30,15 +31,16 @@ def kgs(cfg, args):
 @argument("--cores", required=False, type=int, default=0, help="Number of cores to use (default to number of available cores)")
 @argument("--seed", required=False, type=int, default=0, help="Seed for random generator")
 
-@argument("--train", required=False, type=SingleSampler, default=SingleSampler("10::10"), help="Ratio of games to use for training")
-@argument("--validation", required=False, type=SingleSampler, default=SingleSampler("10::10"), help="Ratio of games to use for validation")
-@argument("--test", required=False, type=SingleSampler, default=SingleSampler("10::10"), help="Ratio of games to use for training")
+@argument("--train", required=False, type=SingleSampler, default=SingleSampler("10::10"), 
+    help="Specification for train sampling: game ratio:max games:board ratio:max boards")
+@argument("--validation", required=False, type=SingleSampler, default=SingleSampler("10::10"), 
+    help="Specification for validation sampling: game ratio:max games:board ratio:max boards")
+@argument("--test", required=False, type=SingleSampler, default=SingleSampler("10::10"), 
+    help="Specification for test sampling: game ratio:max games:board ratio:max boards")
 
-@argument("--buffer-size", required=False, type=int, default=25000, help="Buffer for games")
+@argument("--buffer-size", required=False, type=int, default=500000, help="Buffer for games (default 500000, ~200 MB)")
 @command(description="Prepare KGS files for training")
 def prepare(cfg, args):
-    print(repr(args.train))
-
     if args.train.game_ratio+args.validation.game_ratio+args.test.game_ratio > 1:
         raise Exception("Sum of train/val/test ratio cannot be greater than 1")
 
@@ -51,12 +53,12 @@ def prepare(cfg, args):
     index = KGSIndex(data_directory=str(cfg.kgsdirectory), index_page=str(cfg.kgsdirectory.joinpath('kgs_index.html')))
 
     dirname = args.processor
-    dirname += '%d-%d-train-%s-val-%s-test-%s' % (args.seed, args.boardsize, args.train, args.validation, args.test)
+    dirname += '-%d-%d-train-%s-val-%s-test-%s' % (args.seed, args.boardsize, args.train, args.validation, args.test)
     datadir = cfg.datadirectory.joinpath(dirname)
 
     logging.info("Outputs in directory %s", datadir)
     datadir.mkdir(exist_ok=True)
-    if datadir.joinpath("information.json").file_exists():
+    if datadir.joinpath("information.json").is_file():
         raise Exception("information.json file exist - dataset already pre-processed")
 
     processor = processorclass()
@@ -76,32 +78,54 @@ def show(cfg, args):
     dataset = Dataset(args.boardspath)
     with dataset[args.type] as data:
         print(data[args.board])
-    
         data.readall()
 
 
 # --- Model training
 
 
+def getmodel(model):
+    module = "%s.models.%s" % (__package__, model)
+    m = importlib.import_module(module)
+    model = m.Model()
+    return model
+
+def getbot(model, parameters: Path):
+    from .model import ModelBot
+
+    model = getmodel(model)
+    if parameters:
+        logging.info("Loading from %s", parameters)
+        model.load(parameters)
+
+    if isinstance(model, ModelBot):
+        return model
+
+    return ModelBot(model)
+
 @argument("data",  type=Path, help="Directory containing the training data")
 @argument("model", help="Name of the model (corresponds to a python module)")
 @argument("parameters", type=Path, help="Directory containing the model parameters")
+
 @argument("--batchsize", type=int, default=10000, help="Batch size (train)")
+@argument("--iterations", type=int, default=10000, help="Maximum number of iterations")
+
 @argument("--checkpoint", type=int, default=100, help="Number of training iterations before checkpoint")
 @argument("--reset", default=False, action="store_true", help="Reset the model")
 @command(description="Supervised training of a policy model")
 def direct_policy_train(cfg, args):
     ds = Dataset(args.data)
 
-    m = importlib.import_module(args.model)
-    model = m.Model(args.arguments, args.parameters)
+    model = getmodel(args.model)
 
-    if not args.reset and not model.restore():
-        model.init(ds.processor, ds.boardsize)
+    if not args.reset and not model.restore(args.parameters):
+        model.init(ds.processor, ds.boardsize, configure(model, args.arguments))
 
     with ds["test"] as data:
         logging.info("Loading test data")
         test_data = data.readall()
+        logging.info("Test data: %s boards", test_data[0].shape[0])
+
     # with ds["validation"] as data:
     #     logging.info("Loading validation data")
     #     validation_data = data.readall()
@@ -112,61 +136,49 @@ def direct_policy_train(cfg, args):
             train_cost = model.train(*train_data)
             test_cost = model.cost(*test_data)
             if (model.epoch % args.checkpoint) == 0:
-                model.save_checkpoint()
+                model.save_checkpoint(args.parameters)
             logging.info("Iteration %d: train=%g, test=%g", model.epoch, train_cost, test_cost)
+            if model.epoch >= args.iterations:
+                break
+        model.save_checkpoint(args.parameters)
 
 # --- Model testing
 
-def getmodel(model, parameters, load=True):
-    from .model import ModelBot, GoModel
-
-    m = importlib.import_module(model)
-    if issubclass(m.Model, GoModel):
-        return m.Model()
-
-    model = m.Model(args.parameters)
-    if load:
-        model.load()
-    return ModelBot(model=model, processor=model.processor)
-
-
-
 @argument('--host', default='localhost', help='host to listen to')
 @argument('--port', '-p', type=int, default=8080, help='Port the web server should listen on (default 8080).')
-@argument("model", help="Name of the model (corresponds to a python module)")
-@argument("parameters", type=Path, help="Directory containing the model parameters")
+@argument("model", help="name of the model (corresponds to a python module)")
+@argument("parameters", nargs="?", help="Parameters")
 @command(description='Start a GO server and opens a web page')
-def demo(cfg, args):
-    from .model import ModelBot, HTTPFrontend
+def web(cfg, args):
+    logging.info("Loading model")
+    model = getbot(args.model, args.parameters)
 
-    m = importlib.import_module(args.model)
-    bot = getmodel(args.model, args.parameters)
-
-    go_server = HTTPFrontend(bot=bot, port=args.port)
+    logging.info("Starting web server")
+    go_server = HTTPFrontend(bot=model, port=args.port)
     go_server.run()
 
 
 @argument('--host', default='localhost', help='host to listen to')
 @argument('--port', '-p', type=int, default=8080, help='Port the web server should listen on (default 8080).')
-@argument("model", help="Name of the model (corresponds to a python module)")
-@argument("parameters", type=Path, help="Directory containing the model parameters")
+@argument("model", help="Model name (module in betago.models)")
+@argument("parameters", nargs="?", help="Model parameters")
 @command(description='Start a GTP server')
 def gtp(cfg, args):
-    from .model import ModelBot, HTTPFrontend
     from .gtp import GTPFrontend
 
-    model = getmodel(args.model, args.parameters)
+    logging.info("Loading model")
+    model = getbot(args.model, args.parameters)
 
     logging.info("Starting GTP frontend")
-    frontend = GTPFrontend(bot=ModelBot(model))
+    frontend = GTPFrontend(bot=model)
     frontend.run()
 
 
 
-@argument("model1", help="Name of the model (corresponds to a python module)")
-@argument("parameters1", type=Path, help="Directory containing the model parameters")
-@argument("model2", help="Name of the model (corresponds to a python module)")
-@argument("parameters2", type=Path, help="Directory containing the model parameters")
+@argument("model1", help="Model name (module in betago.models)")
+@argument("parameters1", help="Model 1 parameters (empty string if none)")
+@argument("model2", help="Model name (module in betago.models)")
+@argument("parameters2", help="Model 2 parameters  (empty string if none)")
 @argument('--komi', '-k', type=float, default=5.5)
 @command(description='Simulate a game between two bots')
 def simulate(cfg, args):
@@ -175,11 +187,11 @@ def simulate(cfg, args):
     import betago.scoring as scoring
     import betago.simulate as simulate
 
-    # Load models
-    black_bot = getmodel(args.model1, args.parameters1)
-    white_bot = getmodel(args.model2, args.parameters2)
+    black_bot = getbot(args.model1, args.parameters1)
+    white_bot = getbot(args.model2, args.parameters2)
 
     # Simulate
+    logging.info("Starting simulation")
     board = goboard.GoBoard()
     simulate.simulate_game(board, black_bot, white_bot)
     

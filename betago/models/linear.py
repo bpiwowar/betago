@@ -5,25 +5,35 @@ import torch
 from torch.autograd import Variable
 
 from betago.model import BaseModel, TorchModel
+from betago.commands import argument
 
 
+# Arguments can be added using the "argument" annotation
+# whose parameters follow the argpase.ArgumentParser.add_argument
+@argument("--hidden", type=int, default=0)
 class Model(TorchModel):
-    def __init__(self, arguments, parameterspath: Path):
-        if arguments:
-            raise Exception("No extra arguments needed")
-        super().__init__(parameterspath)
-
-    def init(self, *args, **kwargs):
-        super().init(*args, **kwargs)
-        
+    """
+    A simple model with one or two layers
+    """
+    def construct(self):
+        """Called when the model has been configured to construct the network"""
         self.input_size = self.numplanes * self.boardsize**2
-        self.linear = torch.nn.Linear(self.input_size, self.boardsize**2)
+        if self.hidden:
+            self.modules = torch.nn.ModuleList([
+                torch.nn.Linear(self.input_size, self.hidden), 
+                torch.nn.ReLU(),
+                torch.nn.Linear(self.hidden, self.boardsize**2)
+            ])
+        else:
+            self.layers = torch.nn.Linear(self.input_size, self.boardsize**2)
+
         self.optimizer = torch.optim.Adam(self.parameters(), lr=1e-5)
-    
+        logging.info("Model initialized: %s", self)
+
 
     def _predict(self, boards, volatile=True):
         _boards = Variable(torch.Tensor(boards), volatile=volatile)
-        y = self.linear(_boards.view(-1, self.input_size))
+        y = self.modules(_boards.view(-1, self.input_size))
         return y
 
     def _cost(self, boards, labels, volatile=True):

@@ -9,22 +9,21 @@ from betago.gtp.board import gtp_position_to_coords, coords_to_gtp_position
 from betago.dataloader.goboard import GoBoard
 
 
-letters = 'abcdefghijklmnopqrs'
-
-def sgfCoord(coords):
-    row, col = coords
-    return letters[col] + letters[18 - row]
+letters = 'abcdefghijklmnopqrstuvwxyz'
 
 
-class Model(GoModel):
-    def __init__(self, *args):
+class GTPModel(GoModel):
+    def __init__(self, command):
         super().__init__(None, None)
-        # self.command = ["tee", "/tmp/a"] #
-        self.command = ["gnugo", "--mode", "gtp"]
+        self.command = command
         self.p = subprocess.Popen(self.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 
         self.send_command("boardsize %d\n" % self.go_board.board_size)
         self.get_response()
+
+    def sgfCoord(self, coords):
+        row, col = coords
+        return letters[col] + letters[self.go_board.board_size - row]
 
     def send_command(self, cmd):
         self.p.stdin.write(cmd.encode("ascii"))
@@ -85,3 +84,7 @@ class Model(GoModel):
             return None
         else:
             return gtp_position_to_coords(pos)
+
+class Model(GoModel):
+    def __init__(self, *args):
+        super().__init__(["gnugo", "--mode", "gtp"])

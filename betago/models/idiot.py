@@ -7,8 +7,8 @@ class Model(BaseModel):
     '''
     Play random moves, like a good 30k bot.
     '''
-    def __init__(self, path):
-        super().__init__(path)
+    def __init__(self):
+        super().__init__()
         self.processor = ThreePlaneProcessor()
 
     def predict(self, board):

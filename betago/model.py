@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import print_function
 import copy
 import random
+import pickle
 from itertools import chain, product
 from multiprocessing import Process
 
@@ -197,7 +198,7 @@ class HTTPFrontend():
 class GoModel(object):
     '''Tracks a board and selects moves.'''
 
-    def __init__(self, model, processor):
+    def __init__(self, model):
         '''
         Parameters:
         -----------
@@ -206,10 +207,7 @@ class GoModel(object):
                processor. In practice it may very well be (an extension of) a keras model plus glue code.
         '''
         self.go_board = GoBoard(19)
-        if model:
-            self.model = model
-            self.processor = processor
-            self.num_planes = processor.num_planes
+        self.model = model
 
     def set_board(self, board):
         '''Set the board to a specific state.'''
@@ -258,11 +256,10 @@ def fill_dame(board):
 
 
 
+from betago.commands import argument
 
 class BaseModel:
     '''Base model for all learned models'''
-    def __init__(self, parameterspath: Path):
-        self.parameterspath = parameterspath
 
     def load(self):
         pass
@@ -272,47 +269,57 @@ try:
 
     # Move to model
     class TorchModel(torch.nn.Module, BaseModel):
-        def __init__(self, parameterspath: Path):
-            BaseModel.__init__(self, parameterspath)
+        def __init__(self):
+            BaseModel.__init__(self)
             torch.nn.Module.__init__(self)
             self.epoch = 0
             self.optimizer = None
+            # List of parameters to (de)serialize
+            self.__parameters__ = []
 
-        def init(self, processor: GoBaseProcessor, boardsize: int):
+        def init(self, processor: GoBaseProcessor, boardsize: int, state):
             self.processor = processor
             self.numplanes = processor.num_planes
             self.boardsize = boardsize
 
-        def load(self):
-            with self.parameterspath.open('rb') as fp:
+        def load(self, path):
+            with open(path, 'rb') as fp:
                 state = torch.load(fp)
 
-            self.init(GoBaseProcessor.load(state["processor"]), state["boardsize"])
-
+            processor = GoBaseProcessor.load(state["processor"])
+            self.init(processor, state["boardsize"], state)
+            self.construct()
             self.epoch = state["epoch"]
             self.load_state_dict(state["state_dict"])
             self.optimizer.load_state_dict(state["optimizer"])
 
-        
-        def restore(self):
-            if self.parameterspath.is_file():
-                self.load()
+        def restore(self, path: Path):            
+            if path.is_file():
+                self.load(path)
                 logging.info("Restored model (epoch %d)", self.epoch)
                 return True
             return False
 
-        def save_checkpoint(self):
+        def save_checkpoint(self, path: Path):
             state = {
                 'epoch': self.epoch + 1,
                 'state_dict': self.state_dict(),
                 'optimizer' : self.optimizer.state_dict(),
                 'processor': self.processor.to_json(),
-                'boardsize': self.boardsize
+                'boardsize': self.boardsize,
+                'module': self.__class__.__module__,
+                'class': self.__class__.__name__
             }   
-            tmpfilepath = self.parameterspath.with_suffix(".tmp")
+
+            for key in self.__parameters__:
+                state[key] = getattr(self, key)
+
+            
+            tmpfilepath = path.with_suffix(".tmp")
             with open(tmpfilepath, "wb") as fp:
                 torch.save(state, fp)
-            tmpfilepath.replace(self.parameterspath)
+
+            tmpfilepath.replace(path)
 
         def train(self, boards, labels):
             raise NotImplemented
@@ -334,8 +341,9 @@ class ModelBot(GoModel):
     '''
 
     def __init__(self, model, top_n=10):
-        super(ModelBot, self).__init__(model=model, processor=model.processor)
+        super(ModelBot, self).__init__(model=model)
         self.top_n = top_n
+        self.processor = model.processor
 
     def apply_move(self, color, move):
         # Apply human move
