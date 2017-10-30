@@ -21,14 +21,14 @@ for PyTorch.
 To download or update GO games
 
 ```
-./gammago kgs
+./ggo kgs
 ```
 
 ## Pre-processing
 
 Before training, you need to pre-process the data with the command 
 
-```./gammago prepare [options]```
+```./ggo prepare [options]```
 
 where the `options` are
 
@@ -52,7 +52,7 @@ Each argument is optional; for instance `--train .5::.3` will sample 50% of the 
 
 ### Direct training
 
-```./gammago direct-policy-train [--batchsize BATCHSIZE] [--checkpoint CHECKPOINT] MODEL MODEL_FILE [MODEL OPTIONS]```
+```./ggo direct-policy-train [--batchsize BATCHSIZE] [--checkpoint CHECKPOINT] MODEL MODEL_FILE [MODEL OPTIONS]```
 
 where
 
@@ -65,7 +65,7 @@ where
 
 ### Training by competition
 
-```./gammago direct-policy-train [--batchsize BATCHSIZE] [--checkpoint CHECKPOINT] PARAMETERS```
+```./ggo direct-policy-train [--batchsize BATCHSIZE] [--checkpoint CHECKPOINT] PARAMETERS```
 
 where
 
@@ -81,19 +81,27 @@ where
 
 Launch a go game with a demo bot (you have to open a web page)
 
-```./gammago demo [--port] MODEL_PATH```
+```./ggo demo [--port] MODEL [PARAMETERS]```
 
-where `MODEL_PATH` is either a model name (e.g. `gammago.models.idiot`), or a parameter file.
+where `MODEL` is a model name (e.g. `gammago.models.idiot`) and `PARAMETERS` 
+are the model parameters
 
+## Simulate
 
+Simulate a game between two bots
 
+```./ggo demo [--port] BLACK_MODEL BLACK_PARAMETERS WHITE_MODEL WHITE_PARAMETERS```
+
+where `MODEL` is a model name (e.g. `gammago.models.idiot`) and `PARAMETERS` 
+are the model parameters
 
 
 # Misc
 
 ## Pre-defined models
 
-- `gammago.models.gnugo`
+- `gnugo` is a bot that uses gnu go
+- `pachi` is a bot that uses pachi
 
 ## Literature
 

@@ -150,6 +150,7 @@ def direct_policy_train(cfg, args):
 @argument("parameters", nargs="?", help="Parameters")
 @command(description='Start a GO server and opens a web page')
 def web(cfg, args):
+    from .model import HTTPFrontend
     logging.info("Loading model")
     model = getbot(args.model, args.parameters)
 
@@ -175,36 +176,51 @@ def gtp(cfg, args):
 
 
 
-@argument("model1", help="Model name (module in gammago.models)")
-@argument("parameters1", help="Model 1 parameters (empty string if none)")
-@argument("model2", help="Model name (module in gammago.models)")
-@argument("parameters2", help="Model 2 parameters  (empty string if none)")
+@argument("black_model", help="Model name (module in gammago.models)")
+@argument("black_parameters", help="Model 1 parameters (empty string if none)")
+@argument("white_model", help="Model name (module in gammago.models)")
+@argument("white_parameters", help="Model 2 parameters  (empty string if none)")
+@argument('number', type=int, default=1, nargs='?', help='# of simulations')
 @argument('--komi', '-k', type=float, default=5.5)
 @command(description='Simulate a game between two bots')
 def simulate(cfg, args):
-    from .model import ModelBot, HTTPFrontend
     from .dataloader import goboard
     import gammago.scoring as scoring
     import gammago.simulate as simulate
 
-    black_bot = getbot(args.model1, args.parameters1)
-    white_bot = getbot(args.model2, args.parameters2)
 
-    # Simulate
-    logging.info("Starting simulation")
-    board = goboard.GoBoard()
-    simulate.simulate_game(board, black_bot, white_bot)
+    black_wins = white_wins = draws = 0
+
+    for game in range(args.number):
+        black_bot = getbot(args.black_model, args.black_parameters)
+        white_bot = getbot(args.white_model, args.white_parameters)
+
+        # Simulate
+        logging.info("Starting simulation")
+        board = goboard.GoBoard()
+        simulate.simulate_game(board, black_bot, white_bot)
+        
+        logging.info(goboard.to_string(board))
+        # Does not remove dead stones.
+        logging.info("\nScore (Chinese rules):")
+        status = scoring.evaluate_territory(board)
+        black_area = status.num_black_territory + status.num_black_stones
+        black_score = black_area
+        white_area = status.num_white_territory + status.num_white_stones
+        white_score = white_area + args.komi
+        logging.info("Black %d" % black_area)
+        logging.info("White %d + %.1f = %.1f" % (white_area, args.komi, white_score))
+
+        if black_score > white_score:
+            black_wins += 1
+        elif white_score > black_score:
+            white_wins += 1
+        else:
+            draw += 1
+    logging.info("Statistics: %d black wins, %d white wins, %d draws", black_wins, white_wins, draws)
+    print(black_wins, white_wins, draws)
+
     
-    print("Game over!")
-    print(goboard.to_string(board))
-    # Does not remove dead stones.
-    print("\nScore (Chinese rules):")
-    status = scoring.evaluate_territory(board)
-    black_area = status.num_black_territory + status.num_black_stones
-    white_area = status.num_white_territory + status.num_white_stones
-    white_score = white_area + args.komi
-    print("Black %d" % black_area)
-    print("White %d + %.1f = %.1f" % (white_area, args.komi, white_score))
 
 # --- Parse command line
 

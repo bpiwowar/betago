@@ -288,6 +288,10 @@ try:
                 state = torch.load(fp)
 
             processor = GoBaseProcessor.load(state["processor"])
+            self.__parameters__ = state["parameters"]
+            for key in self.__parameters__:
+                setattr(self, key, state[key])
+
             self.init(processor, state["boardsize"], state)
             self.epoch = state["epoch"]
             self.load_state_dict(state["state_dict"])
@@ -308,7 +312,8 @@ try:
                 'processor': self.processor.to_json(),
                 'boardsize': self.boardsize,
                 'module': self.__class__.__module__,
-                'class': self.__class__.__name__
+                'class': self.__class__.__name__,
+                'parameters': self.__parameters__
             }   
 
             for key in self.__parameters__:

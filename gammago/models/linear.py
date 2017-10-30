@@ -40,8 +40,9 @@ class Model(TorchModel):
 
     def _predict(self, boards, volatile=True):
         _boards = Variable(torch.Tensor(boards), volatile=volatile)
+        y = _boards.view(-1, self.input_size)
         for layer in self.layers:
-            y = layer(_boards.view(-1, self.input_size))
+            y = layer(y)
         return y
 
     def _cost(self, boards, labels, volatile=True):
