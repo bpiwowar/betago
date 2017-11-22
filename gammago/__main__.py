@@ -27,7 +27,7 @@ def kgs(cfg, args):
     index.download_files()
 
 @argument("--processor", required=True, choices=["SevenPlane", "ThreePlane"])
-@argument("--boardsize", default=19, help="Board size of processed games")
+@argument("--boardsize", default=19, type=int, help="Board size of processed games")
 @argument("--cores", required=False, type=int, default=0, help="Number of cores to use (default to number of available cores)")
 @argument("--seed", required=False, type=int, default=0, help="Seed for random generator")
 
