@@ -10,11 +10,10 @@ developing a full learning go bot.
 
 The only pre-requisite needed is numpy; you should install your favorite 
 machine learning toolkit. At the moment, there is a base class and examples 
-for PyTorch.
+for PyTorch (`linear`).
 
 
 # Commands
-
 
 ## Downloading KGS data
 
@@ -70,10 +69,10 @@ where
 where
 
 - `--batchsize BATCHSIZE` gives the training batchsize
-- `--checkpoint CHECKPOINT` gives the number of iterations before 
+- `--checkpoint CHECKPOINT` gives the number of iterations before saving the model
 - `--iterations ITERATIONS` is the number of iterations
 - `--reset` resets the model instead of continuing to train with it
-- `PARAMETER` is the file or directory that will contain all the information necessary to run the model (demo, etc.)
+- `PARAMETER` is the file (or directory, depending on the model) that will contain all the information necessary to run the model (demo, etc.)
 - `MODEL OPTIONS` are options specific to the model (must be serialized with the information )
 
 
@@ -93,15 +92,18 @@ Simulate a game between two bots
 ```./ggo demo [--port] BLACK_MODEL BLACK_PARAMETERS WHITE_MODEL WHITE_PARAMETERS```
 
 where `MODEL` is a model name (e.g. `gammago.models.idiot`) and `PARAMETERS` 
-are the model parameters
+are the model parameters (file or directory) or `""` if no parameters are
+needed for the model.
 
 
 # Misc
 
 ## Pre-defined models
 
+- `idiot` is a random bot
 - `gnugo` is a bot that uses gnu go
 - `pachi` is a bot that uses pachi
+- `linear` is a simple multi-layer neural network (one option: number of hidden layers)
 
 ## Literature
 
