@@ -26,14 +26,15 @@ class Model(TorchModel):
         self.input_size = self.numplanes * self.boardsize**2
         
         if self.hidden:
-            self.layers = torch.nn.ModuleList([
+            layers = [
                 torch.nn.Linear(self.input_size, self.hidden), 
                 torch.nn.ReLU(),
                 torch.nn.Linear(self.hidden, self.boardsize**2)
-            ])
+            ]
         else:
-            self.layers = torch.nn.Linear(self.input_size, self.boardsize**2)
+            layers = [torch.nn.Linear(self.input_size, self.boardsize**2)]
 
+        self.layers = torch.nn.ModuleList(layers)
         self.optimizer = torch.optim.Adam(self.parameters(), lr=1e-5)
         logging.info("Model initialized: %s", self)
 
