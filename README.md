@@ -28,6 +28,9 @@ Models must be located in the `gammago/models` directory. For instance, the
 model `linear` corresponds to importing using the class `Model` in
 the `gammago.models.linear` module.
 
+The easiest is to look to start from linear.py by copying the file; comments
+should be enough to start coding.
+
 
 # Commands
 
