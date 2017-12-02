@@ -12,6 +12,12 @@ The only pre-requisite needed is numpy; you should install your favorite
 machine learning toolkit. At the moment, there is a base class and examples 
 for PyTorch (`linear`).
 
+## Models 
+
+Models must be located in the `gammago/models` directory. For instance, the
+model `linear` corresponds to importing using the class `Model` in
+the `gammago.models.linear` module.
+
 
 # Commands
 
