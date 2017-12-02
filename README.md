@@ -12,6 +12,16 @@ The only pre-requisite needed is numpy; you should install your favorite
 machine learning toolkit. At the moment, there is a base class and examples 
 for PyTorch (`linear`).
 
+Another option is to use docker; an image named `bpiwowar/pytorch`, with `PyTorch` pre-installed,
+can be used.
+
+```
+docker run -p 8080:8080  -v DIR:/wordir bpiwowar/pytorch ./ggo ARGUMENTS
+```
+
+where `DIR` is the main gammago directory.
+
+
 ## Models 
 
 Models must be located in the `gammago/models` directory. For instance, the
