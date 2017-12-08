@@ -200,6 +200,7 @@ class Data:
         return matrix, moves
 
     def readall(self):
+        """Returns a couple (feature matrix, labels)"""
         self.fh.seek(0)
         bs = BitStream(self.fh)
         matrix = np.ndarray((self.count, self.dataset.numplanes, self.dataset.boardsize, self.dataset.boardsize))

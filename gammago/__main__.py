@@ -124,7 +124,8 @@ def direct_policy_train(cfg, args):
     with ds["test"] as data:
         logging.info("Loading test data")
         test_data = data.readall()
-        logging.info("Test data: %s boards", test_data[0].shape[0])
+        memsize = test_data[0].nbytes
+        logging.info("Test data: %s boards [size %d Mo]", test_data[0].shape[0], memsize / 1024**2)
 
     # with ds["validation"] as data:
     #     logging.info("Loading validation data")
