@@ -75,3 +75,4 @@ gammago/test_samples.py
 examples/test_samples.py
 
 *.ipynb_checkpoints
+.DS_Store
